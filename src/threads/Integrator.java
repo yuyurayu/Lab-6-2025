@@ -5,49 +5,58 @@ import functions.Functions;
 public class Integrator extends Thread {
     private Task task;
     private Semaphore semaphore;
-    private int integratedCount;
     private volatile boolean running = true;
+    private int integratedCount = 0;
 
     public Integrator(Task task, Semaphore semaphore) {
         this.task = task;
         this.semaphore = semaphore;
-        this.integratedCount = 0;
+        setName("Integrator");
     }
 
     @Override
     public void run() {
-        int tasksCount = task.getTasksCount();
-
         try {
-            while (integratedCount < tasksCount && running) {
+            while (running) {
+                // Используем семафор для чтения
                 semaphore.beginRead();
 
-                // Проверяем, готово ли задание
-                if (task.isReady() && !task.isCompleted()) {
-                    // Получаем задание
-                    double left = task.getLeft();
-                    double right = task.getRight();
-                    double step = task.getStep();
-
-                    // Вычисляем интеграл
-                    double result = Functions.integrate(task.getFunction(), left, right, step);
-
-                    // Отмечаем как выполненное
-                    task.setCompleted(true);
+                try {
+                    // Получаем задание с гарантией, что оно не пропущено
+                    Task.TaskData data = task.getTask();
                     integratedCount++;
 
+                    // Вычисляем интеграл
+                    double result = Functions.integrate(
+                            data.function,
+                            data.left,
+                            data.right,
+                            data.step
+                    );
+
                     // Выводим результат
-                    System.out.printf("Integrator[%d]: Result %.4f %.4f %.4f %.10f%n",
-                            integratedCount, left, right, step, result);
+                    System.out.printf("  Integrator[%d]: Result %.4f %.4f %.4f %.10f\n",
+                            integratedCount, data.left, data.right, data.step, result);
+
+                } finally {
+                    semaphore.endRead();
                 }
 
-                semaphore.endRead();
+                // Проверяем, все ли задания обработаны
+                if (integratedCount >= task.getTasksCount()) {
+                    break;
+                }
 
                 // Небольшая задержка
-                Thread.sleep(10);
+                if (running) {
+                    Thread.sleep(10);
+                }
             }
+
+            System.out.println("  Integrator: Обработал " + integratedCount + " заданий");
+
         } catch (InterruptedException e) {
-            System.out.println("Integrator прерван");
+            System.out.println("  Integrator: Поток прерван (обработано: " + integratedCount + ")");
         } finally {
             running = false;
         }
@@ -56,5 +65,9 @@ public class Integrator extends Thread {
     public void stopIntegrator() {
         running = false;
         this.interrupt();
+    }
+
+    public int getIntegratedCount() {
+        return integratedCount;
     }
 }

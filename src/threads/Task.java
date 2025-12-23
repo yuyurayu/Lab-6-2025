@@ -8,28 +8,76 @@ public class Task {
     private double right;
     private double step;
     private int tasksCount;
-    private volatile boolean isReady = false;
-    private volatile boolean isCompleted = false;
 
-    // Конструктор
+    // Два состояния для предотвращения пропуска данных
+    private volatile boolean dataReadyForReading = false;
+    private volatile boolean dataReadyForWriting = true;
+    private volatile boolean isRunning = true;
+
+    // Счетчики для контроля
+    private int generatedCount = 0;
+    private int processedCount = 0;
+
     public Task(int tasksCount) {
         this.tasksCount = tasksCount;
     }
 
-    // Геттеры и сеттеры
-    public synchronized void setTask(Function function, double left, double right, double step) {
+    // Синхронизированный метод установки задания для Generator
+    public synchronized void setTask(Function function, double left, double right, double step)
+            throws InterruptedException {
+        // Ждем, пока предыдущее задание не будет обработано
+        while (!dataReadyForWriting && isRunning) {
+            wait();
+        }
+
+        if (!isRunning) {
+            throw new InterruptedException("Task stopped");
+        }
+
         this.function = function;
         this.left = left;
         this.right = right;
         this.step = step;
-        isReady = true;
-        isCompleted = false;
+        generatedCount++;
+
+        dataReadyForWriting = false;
+        dataReadyForReading = true;
+        notifyAll();
     }
 
-    public synchronized void getTask() {
-        isReady = false;
+    // Синхронизированный метод получения задания для Integrator
+    public synchronized TaskData getTask() throws InterruptedException {
+        // Ждем, пока задание не будет готово
+        while (!dataReadyForReading && isRunning) {
+            wait();
+        }
+
+        if (!isRunning) {
+            throw new InterruptedException("Task stopped");
+        }
+
+        TaskData data = new TaskData(function, left, right, step);
+        processedCount++;
+
+        dataReadyForReading = false;
+        dataReadyForWriting = true;
+        notifyAll();
+
+        return data;
     }
 
+    public void stop() {
+        isRunning = false;
+        synchronized (this) {
+            notifyAll();
+        }
+    }
+
+    public int getTasksCount() {
+        return tasksCount;
+    }
+
+    // Вспомогательные методы для SimpleGenerator/SimpleIntegrator
     public Function getFunction() {
         return function;
     }
@@ -46,19 +94,26 @@ public class Task {
         return step;
     }
 
-    public int getTasksCount() {
-        return tasksCount;
-    }
-
     public boolean isReady() {
-        return isReady;
+        return dataReadyForReading;
     }
 
     public boolean isCompleted() {
-        return isCompleted;
+        return !dataReadyForReading && dataReadyForWriting;
     }
 
-    public void setCompleted(boolean completed) {
-        isCompleted = completed;
+    // Внутренний класс для безопасной передачи данных
+    public static class TaskData {
+        public final Function function;
+        public final double left;
+        public final double right;
+        public final double step;
+
+        public TaskData(Function function, double left, double right, double step) {
+            this.function = function;
+            this.left = left;
+            this.right = right;
+            this.step = step;
+        }
     }
 }

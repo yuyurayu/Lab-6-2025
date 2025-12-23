@@ -17,7 +17,6 @@ public class SimpleIntegrator implements Runnable {
 
         while (integratedCount < tasksCount) {
             synchronized (task) {
-                // Ждем, пока появится задание
                 while (!task.isReady() || task.isCompleted()) {
                     try {
                         task.wait();
@@ -27,27 +26,29 @@ public class SimpleIntegrator implements Runnable {
                     }
                 }
 
-                // Получаем задание
-                double left = task.getLeft();
-                double right = task.getRight();
-                double step = task.getStep();
+                try {
+                    // Получаем данные через TaskData для безопасности
+                    Task.TaskData data = task.getTask();
+                    integratedCount++;
 
-                // Вычисляем интеграл
-                double result = Functions.integrate(task.getFunction(), left, right, step);
+                    double result = Functions.integrate(
+                            data.function,
+                            data.left,
+                            data.right,
+                            data.step
+                    );
 
-                // Отмечаем как выполненное
-                task.setCompleted(true);
-                integratedCount++;
+                    System.out.printf("  SimpleIntegrator[%d]: Result %.4f %.4f %.4f %.10f\n",
+                            integratedCount, data.left, data.right, data.step, result);
 
-                // Выводим результат
-                System.out.printf("Integrator: Result %.4f %.4f %.4f %.10f%n",
-                        left, right, step, result);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
 
-                // Уведомляем генератор
                 task.notifyAll();
             }
 
-            // Небольшая задержка для наглядности
             try {
                 Thread.sleep(10);
             } catch (InterruptedException e) {

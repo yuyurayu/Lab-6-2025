@@ -20,7 +20,7 @@ public class SimpleGenerator implements Runnable {
 
         while (generatedCount < tasksCount) {
             synchronized (task) {
-                // Ждем, пока предыдущее задание не будет выполнено
+                // Используем wait/notify для синхронизации
                 while (task.isReady() && !task.isCompleted()) {
                     try {
                         task.wait();
@@ -37,18 +37,20 @@ public class SimpleGenerator implements Runnable {
                 double right = 100 + random.nextDouble() * 100;
                 double step = random.nextDouble();
 
-                // Устанавливаем задание
-                task.setTask(logFunc, left, right, step);
+                try {
+                    task.setTask(logFunc, left, right, step);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
                 generatedCount++;
 
-                // Выводим сообщение
-                System.out.printf("Generator: Source %.4f %.4f %.4f%n", left, right, step);
+                System.out.printf("  SimpleGenerator[%d]: Source %.4f %.4f %.4f (base=%.4f)\n",
+                        generatedCount, left, right, step, base);
 
-                // Уведомляем интегратор
                 task.notifyAll();
             }
 
-            // Небольшая задержка для наглядности
             try {
                 Thread.sleep(10);
             } catch (InterruptedException e) {
